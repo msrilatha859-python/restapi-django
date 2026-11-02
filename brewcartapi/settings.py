@@ -32,7 +32,11 @@ ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS")
 if ALLOWED_HOSTS:
     ALLOWED_HOSTS = ALLOWED_HOSTS.split(",")
 else:
-    ALLOWED_HOSTS = ["restapi-django-5nhm.onrender.com"]
+    ALLOWED_HOSTS = [
+    "restapi-django-5nhm.onrender.com",
+     "127.0.0.1",
+     "localhost",
+     ]
 
 
 # Application definition
@@ -127,5 +131,5 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 CORS_ALLOWED_ORIGINS = [
-    "https://brewcart.vercel.app/",
+    "https://brewcart.vercel.app",
 ]
