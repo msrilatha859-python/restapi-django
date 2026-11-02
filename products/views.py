@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -50,3 +51,102 @@ def product_detail(request, pk):
     elif request.method == 'DELETE':
         product.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+@api_view(["POST"])
+def create_order(request):
+    data = request.data
+
+    # Validate customer details
+    required_fields = [
+        "full_name",
+        "email",
+        "phone",
+        "address",
+        "city",
+        "pincode",
+    ]
+
+    for field in required_fields:
+        if not data.get(field):
+            return Response(
+                {"error": f"{field} is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    # Validate cart items
+    items = data.get("items")
+
+    if not isinstance(items, list) or not items:
+        return Response(
+            {"error": "Your cart is empty or invalid."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+            order_items = []
+            total_amount = 0
+
+            # Validate products and calculate total using database prices
+            for item in items:
+                product_id = item.get("product")
+                quantity = item.get("quantity")
+
+                if isinstance(quantity, bool) or not isinstance(quantity, int) or quantity < 1:
+                    return Response(
+                        {"error": "Each product must have a valid positive quantity."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                try:
+                    product = Product.objects.get(pk=product_id)
+                except (Product.DoesNotExist, ValueError, TypeError):
+                    return Response(
+                        {"error": f"Product {product_id} was not found."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+                total_amount += product.price * quantity
+
+                order_items.append({
+                    "product": product,
+                    "quantity": quantity,
+                    "price": product.price,
+                })
+
+            # Create the order
+            order = Order.objects.create(
+                full_name=data["full_name"],
+                email=data["email"],
+                phone=data["phone"],
+                address=data["address"],
+                city=data["city"],
+                pincode=data["pincode"],
+                total_amount=total_amount,
+            )
+
+            # Save the products in the order
+            for item in order_items:
+                OrderItem.objects.create(
+                    order=order,
+                    product=item["product"],
+                    quantity=item["quantity"],
+                    price=item["price"],
+                )
+
+        # Return the saved order
+        serializer = OrderSerializer(order)
+
+        return Response(
+            {
+                "message": "Order placed successfully!",
+                "order": serializer.data,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    except Exception:
+        return Response(
+            {"error": "Unable to place your order. Please try again."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
