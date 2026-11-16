@@ -50,4 +50,4 @@ class OrderSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
             "items",
-        ]
+        ]        

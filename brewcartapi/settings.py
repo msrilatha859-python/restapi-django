@@ -131,5 +131,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 CORS_ALLOWED_ORIGINS = [
-    "https://brewcart.vercel.app",
+    "https://brewcart.vercel.app",    
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
 ]
