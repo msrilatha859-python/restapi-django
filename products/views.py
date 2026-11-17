@@ -2,9 +2,10 @@ from django.db import transaction
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Product, Order, OrderItem
+from .models import Product, Order, OrderItem, Payment
 from .serializers import ProductSerializer, OrderSerializer
 from django.http import HttpResponse
+import uuid
 
 def home(requst):
     return HttpResponse("<h1>Welcome to Brewcart API</h1>")
@@ -148,5 +149,89 @@ def create_order(request):
     except Exception:
         return Response(
             {"error": "Unable to place your order. Please try again."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(["POST"])
+def simulate_payment(request, order_id):
+    payment_method = request.data.get("payment_method")
+    payment_result = request.data.get("result")
+
+    # Check whether the order exists
+    try:
+        order = Order.objects.get(pk=order_id)
+    except Order.DoesNotExist:
+        return Response(
+            {"error": "Order not found."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Allow payment only for orders awaiting payment
+    if order.status != "Pending Payment":
+        return Response(
+            {"error": "This order is not awaiting payment."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate payment method
+    valid_methods = ["UPI", "Card"]
+
+    if payment_method not in valid_methods:
+        return Response(
+            {"error": "Select a valid payment method: UPI or Card."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate simulated payment result
+    if payment_result not in ["Success", "Failed"]:
+        return Response(
+            {"error": "Payment result must be Success or Failed."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        with transaction.atomic():
+
+            # Generate a unique demo transaction ID
+            transaction_id = f"DEMO-{uuid.uuid4().hex[:12].upper()}"
+
+            # Create payment record
+            payment = Payment.objects.create(
+                order=order,
+                amount=order.total_amount,
+                payment_method=payment_method,
+                status=payment_result,
+                transaction_id=transaction_id,
+            )
+
+            # Confirm order only after successful payment
+            if payment_result == "Success":
+                order.status = "Confirmed"
+                order.save(update_fields=["status"])
+
+        return Response(
+            {
+                "message": (
+                    "Payment successful!"
+                    if payment_result == "Success"
+                    else "Payment failed. You can retry."
+                ),
+                "payment": {
+                    "id": payment.id,
+                    "order_id": order.id,
+                    "amount": str(payment.amount),
+                    "payment_method": payment.payment_method,
+                    "status": payment.status,
+                    "transaction_id": payment.transaction_id,
+                },
+                "order_status": order.status,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    except Exception:
+        return Response(
+            {"error": "Unable to process the simulated payment."},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
